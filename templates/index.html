@@ -79,6 +79,10 @@
   .install-btns .skip { background:transparent; color:var(--muted); border:1px solid var(--line); flex:0 0 35%; }
   .install-link { display:block; margin:18px auto 0; background:none; border:0; color:var(--accent); width:auto;
                   font-size:.95rem; font-weight:700; padding:6px; text-decoration:underline; }
+  .fx { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .fx button { margin:0; width:auto; padding:6px 10px; font-size:.9rem; font-weight:700; border-radius:999px;
+               background:var(--bg); color:var(--ink); border:1px solid var(--line); }
+  .fx button:active { transform:scale(.96); }
   .err { color:var(--accent); margin-top:12px; min-height:1em; }
 </style>
 </head>
@@ -89,6 +93,15 @@
   <div class="card">
     <textarea id="text" maxlength="{{ max_chars }}" placeholder="مثلاً: إزيك يا صاحبي؟ عامل إيه النهارده؟ وحشتني والله."></textarea>
     <div class="count" dir="ltr"><span id="n">0</span> / {{ max_chars }}</div>
+    <div class="fx" aria-label="ضيف إحساس للكلام">
+      <button type="button" data-tag="[ضحكة]">😂 ضحكة</button>
+      <button type="button" data-tag="[ضحكة كبيرة]">🤣 ضحكة كبيرة</button>
+      <button type="button" data-tag="[هه]">😏 هه</button>
+      <button type="button" data-tag="[تريقة]">🙄 تريقة</button>
+      <button type="button" data-tag="[حماس]">🤩 حماس</button>
+      <button type="button" data-tag="[حزن]">😔 حزن</button>
+      <button type="button" data-tag="[همس]">🤫 همس</button>
+    </div>
     <div class="tabs">
       <button type="button" id="tEdge" class="on">مايكروسوفت (مجاني)</button>
       <button type="button" id="tEleven">ElevenLabs (فيه روح)</button>
@@ -107,6 +120,7 @@
           <option value="calm">هادي 😌</option>
           <option value="sad">حزين 😔</option>
           <option value="story">بيحكي حكاية 📖</option>
+          <option value="sarcastic">بيتريق 🙄</option>
         </select>
         <span class="hint"><input type="checkbox" id="auto" checked> تعبير تلقائي حسب علامات الترقيم</span>
       </label>
@@ -117,7 +131,7 @@
         <input id="pitch" type="range" min="-50" max="50" value="0" step="5">
       </label>
     </div>
-    <p class="hint" id="edgeTip">💡 عشان الصوت يبقى فيه روح: استخدم ؟ و ! و ... في كلامك، وحط 😂 لو جملة فيها ضحك أو 😢 لو حزينة.</p>
+    <p class="hint" id="edgeTip">💡 دوس على الأزرار اللي تحت الكلام عشان تحط ضحكة أو تريقة مكان ما إنت واقف. "ضحكة" بتضحك مكانها، و"تريقة" و"حماس" و"حزن" و"همس" بيغيّروا الجملة اللي بعدهم. وكمان ؟ و ! و ... و 😂 و 🙄 بيفرقوا في النبرة.</p>
     <div id="elevenBox" style="display:none">
       <div class="row">
         <label>ElevenLabs API key
@@ -273,6 +287,13 @@
     } catch (e) { $('err').textContent = e.message; }
     finally { $('cloneBtn').disabled = false; $('cloneBtn').textContent = 'اعمل نسخة من صوتي'; }
   };
+  document.querySelectorAll('.fx button').forEach(b => b.addEventListener('click', () => {
+    const t = $('text'), tag = ' ' + b.dataset.tag + ' ';
+    const st = t.selectionStart ?? t.value.length, en = t.selectionEnd ?? t.value.length;
+    t.value = t.value.slice(0, st) + tag + t.value.slice(en);
+    t.focus(); t.selectionStart = t.selectionEnd = st + tag.length;
+    $('n').textContent = t.value.length;
+  }));
   let lastUrl;
   $('go').addEventListener('click', async () => {
     const text = $('text').value.trim();

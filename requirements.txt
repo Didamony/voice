@@ -1,3 +1,6 @@
 flask>=3.0
 edge-tts>=6.1
 requests>=2.31
+numpy>=1.26
+miniaudio>=1.59
+lameenc>=1.7
