@@ -2,7 +2,15 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#c0392b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="صوت مصري">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="manifest" href="/static/manifest.webmanifest">
 <title>صوت مصري</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -12,8 +20,9 @@
   }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family:"Cairo",system-ui,sans-serif; }
-  main { max-width:720px; margin:0 auto; padding:32px 16px; }
-  h1 { margin:0 0 4px; font-size:2rem; }
+  main { max-width:720px; margin:0 auto; padding:calc(32px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(32px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+  h1 { margin:0 0 4px; font-size:2rem; display:flex; align-items:center; gap:12px; }
+  .logo { width:48px; height:48px; border-radius:12px; }
   p.sub { margin:0 0 24px; color:var(--muted); }
   .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px; }
   textarea { width:100%; min-height:180px; resize:vertical; font:inherit; font-size:1.1rem; padding:12px;
@@ -51,7 +60,7 @@
 </head>
 <body>
 <main>
-  <h1>🎙️ صوت مصري</h1>
+  <h1><img src="/static/icon-192.png" alt="" class="logo"> صوت مصري</h1>
   <p class="sub">اكتب أي كلام وهيتحول لصوت باللهجة المصرية</p>
   <div class="card">
     <textarea id="text" maxlength="{{ max_chars }}" placeholder="مثلاً: إزيك يا صاحبي؟ عامل إيه النهارده؟ وحشتني والله."></textarea>
