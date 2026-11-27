@@ -11,6 +11,8 @@ import os
 import re
 
 import edge_tts
+import expressive
+import pronounce
 import requests
 from flask import Flask, jsonify, render_template, request, send_file
 
@@ -57,64 +59,7 @@ async def edge_synthesize(text, voice, rate="+0%", pitch="+0Hz", volume="+0%"):
     return buf.getvalue()
 
 
-# ---- الإحساس: أصوات مايكروسوفت المصرية مافيهاش مشاعر جاهزة، فبنلعب في
-# السرعة وطبقة الصوت وعلوّه لكل جملة لوحدها عشان الكلام يبقى فيه حياة.
-MOODS = {  # (سرعة %، طبقة Hz، علو %، قد إيه الجمل بتختلف عن بعض)
-    "normal":  (0, 0, 0, 2),
-    "excited": (12, 6, 10, 4),
-    "calm":    (-10, -3, -8, 1),
-    "sad":     (-18, -8, -12, 1),
-    "story":   (-6, 0, 0, 5),
-}
-_ENDS = ".!?؟…😂🤣😆😅😢😭😔💔"
-_SENT = re.compile(rf"[^{_ENDS}\n]+(?:\.\.\.|[{_ENDS}]+)?|\n+")
-_EMOJI = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF\uFE0F]")
-_LAUGH = re.compile(r"(?:ه{3,}|😂|🤣|😆|😅)")
-_SAD = re.compile(r"(?:😢|😭|😔|💔|☹)")
-
-
-def split_expressive(text, mood="normal", auto=True):
-    """يقسّم الكلام لجمل ويدي كل جملة سرعة وطبقة وعلو حسب المود وشكل الجملة."""
-    base_r, base_p, base_v, swing = MOODS.get(mood, MOODS["normal"])
-    parts = [m.group(0).strip() for m in _SENT.finditer(text)]
-    parts = [x for x in parts if x]
-    out = []
-    for i, part in enumerate(parts):
-        r, pch, v = base_r, base_p, base_v
-        if auto:
-            # تنويع خفيف بين الجمل عشان مايبقاش الكلام على وتيرة واحدة
-            pch += swing if i % 2 else -swing // 2
-            end = part.rstrip()
-            if end.endswith(("؟", "?")):
-                pch += 6
-            if end.endswith("!"):
-                r += 8; pch += 4; v += 10
-            if end.endswith(("...", "…")):
-                r -= 10; pch -= 2
-            if _LAUGH.search(part):
-                r += 12; pch += 6; v += 5
-            if _SAD.search(part):
-                r -= 12; pch -= 6; v -= 8
-        spoken = _EMOJI.sub("", part).strip()
-        if not re.search(r"\w", spoken):
-            continue
-        out.append((spoken, max(-50, min(100, r)), max(-50, min(50, pch)), max(-50, min(50, v))))
-    return out
-
-
-async def edge_expressive(text, voice, mood, auto, user_rate, user_pitch):
-    segments = split_expressive(text, mood, auto) or [(text, 0, 0, 0)]
-    sem = asyncio.Semaphore(4)
-
-    async def one(seg):
-        spoken, r, pch, v = seg
-        r = max(-50, min(100, r + user_rate))
-        pch = max(-50, min(50, pch + user_pitch))
-        async with sem:
-            return await edge_synthesize(spoken, voice, f"{r:+d}%", f"{pch:+d}Hz", f"{v:+d}%")
-
-    chunks = await asyncio.gather(*(one(seg) for seg in segments))
-    return b"".join(chunks)  # ملفات MP3 بتتلزق ورا بعض عادي
+_EMOJI = expressive._EMOJI
 
 
 def eleven_synthesize(text, api_key, voice_id, model_id, stability, style):
@@ -226,6 +171,11 @@ def tts():
     if not re.search(r"\w", _EMOJI.sub("", text)):
         return jsonify(error="اكتب كلام مش إيموجي بس"), 400
 
+    # النطق: التشكيل بيفضل زي ما هو، وقاموس المستخدم والنطق المصري بيتطبقوا
+    lexicon = pronounce.sanitize_lexicon(data.get("lexicon") if request.is_json else None)
+    dialect = data.get("dialect") if data.get("dialect") in ("auto", "egyptian", "fusha") else "auto"
+    text = pronounce.apply(text, lexicon, dialect)
+
     engine = data.get("engine", "edge")
     try:
         if engine == "eleven":
@@ -237,18 +187,19 @@ def tts():
             if not re.fullmatch(r"[A-Za-z0-9]{10,40}", voice_id):
                 return jsonify(error="اختار صوت من ElevenLabs أو حط Voice ID صحيح"), 400
             audio = eleven_synthesize(
-                text, key, voice_id, model,
+                expressive.tags_for_eleven(text), key, voice_id, model,
                 stability=_clamp_float(data.get("stability"), 0, 1, 0.5),
                 style=_clamp_float(data.get("style"), 0, 1, 0.3),
             )
         else:
-            voice = EDGE_VOICES.get(data.get("voice", "salma"), EDGE_VOICES["salma"])
-            mood = data.get("mood") if data.get("mood") in MOODS else "normal"
+            voice = data.get("voice") if data.get("voice") in expressive.VOICES else "salma"
+            mood = data.get("mood") if data.get("mood") in expressive.MOODS else "normal"
             auto = str(data.get("auto", "1")).lower() not in ("0", "false", "no", "")
-            audio = asyncio.run(edge_expressive(
+            audio = asyncio.run(expressive.render(
                 text, voice, mood, auto,
                 _clamp_int(data.get("rate"), -50, 100),
                 _clamp_int(data.get("pitch"), -50, 50),
+                edge_synthesize,
             ))
     except Exception as exc:  # network / service errors
         app.logger.exception("TTS failed")
