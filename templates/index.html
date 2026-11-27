@@ -83,16 +83,36 @@
   .fx button { margin:0; width:auto; padding:6px 10px; font-size:.9rem; font-weight:700; border-radius:999px;
                background:var(--bg); color:var(--ink); border:1px solid var(--line); }
   .fx button:active { transform:scale(.96); }
+  .harakat { gap:4px; align-items:center; }
+  .harakat button { font-size:1.1rem; min-width:0; padding:4px 9px; }
+  .lexbox { margin-top:14px; border:1px dashed var(--line); border-radius:12px; padding:10px 12px; }
+  .lexbox summary { cursor:pointer; font-weight:700; }
+  .lexrow { display:flex; gap:6px; align-items:center; margin-top:8px; }
+  .lexrow input { flex:1; min-width:0; font:inherit; padding:8px; border-radius:10px; border:1px solid var(--line);
+                  background:transparent; color:inherit; }
+  .lexrow button { flex:none; }
+  .lexrow .del { margin:0; width:auto; padding:6px 10px; background:transparent; color:var(--accent);
+                 border:1px solid var(--line); font-size:.9rem; }
+  .lexrow b { flex:1; min-width:0; overflow-wrap:anywhere; }
   .err { color:var(--accent); margin-top:12px; min-height:1em; }
 </style>
 </head>
 <body>
 <main>
   <h1><img src="/static/icon-192.png" alt="" class="logo"> صوت مصري</h1>
-  <p class="sub">اكتب أي كلام وهيتحول لصوت باللهجة المصرية</p>
+  <p class="sub">اكتب بالفصحى أو بالعامية المصرية وهيتحول لصوت</p>
   <div class="card">
     <textarea id="text" maxlength="{{ max_chars }}" placeholder="مثلاً: إزيك يا صاحبي؟ عامل إيه النهارده؟ وحشتني والله."></textarea>
     <div class="count" dir="ltr"><span id="n">0</span> / {{ max_chars }}</div>
+    <div class="fx harakat" aria-label="تشكيل">
+      <span class="hint">تشكيل:</span>
+      <button type="button" data-h="&#x064E;" title="فتحة">بَ</button>
+      <button type="button" data-h="&#x064F;" title="ضمة">بُ</button>
+      <button type="button" data-h="&#x0650;" title="كسرة">بِ</button>
+      <button type="button" data-h="&#x0652;" title="سكون">بْ</button>
+      <button type="button" data-h="&#x0651;" title="شدة">بّ</button>
+      <button type="button" data-h="&#x064B;" title="تنوين فتح">بً</button>
+    </div>
     <div class="fx" aria-label="ضيف إحساس للكلام">
       <button type="button" data-tag="[ضحكة]">😂 ضحكة</button>
       <button type="button" data-tag="[ضحكة كبيرة]">🤣 ضحكة كبيرة</button>
@@ -102,6 +122,25 @@
       <button type="button" data-tag="[حزن]">😔 حزن</button>
       <button type="button" data-tag="[همس]">🤫 همس</button>
     </div>
+    <details class="lexbox" id="lexBox">
+      <summary>📖 اللغة والنطق والتشكيل</summary>
+      <label class="lbl">اللغة
+        <select id="dialect">
+          <option value="auto">تلقائي: فصحى وعامية</option>
+          <option value="egyptian">عامية مصرية</option>
+          <option value="fusha">فصحى</option>
+        </select>
+        <span class="hint" id="dialectHint"></span>
+      </label>
+      <p class="hint">التشكيل اللي بتكتبه بيتقري زي ما هو في الفصحى والعامية. لو كلمة بتتنطق غلط: شكّلها، أو ضيفها هنا واكتب إزاي تتنطق.</p>
+      <div id="lexList"></div>
+      <div class="lexrow">
+        <input id="lexW" type="text" placeholder="الكلمة (مثلاً: محمد)">
+        <span>←</span>
+        <input id="lexP" type="text" placeholder="تتنطق (مثلاً: مَحَمَّد)">
+        <button type="button" class="small" id="lexAdd">ضيف</button>
+      </div>
+    </details>
     <div class="tabs">
       <button type="button" id="tEdge" class="on">مايكروسوفت (مجاني)</button>
       <button type="button" id="tEleven">ElevenLabs (فيه روح)</button>
@@ -287,13 +326,51 @@
     } catch (e) { $('err').textContent = e.message; }
     finally { $('cloneBtn').disabled = false; $('cloneBtn').textContent = 'اعمل نسخة من صوتي'; }
   };
-  document.querySelectorAll('.fx button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.fx button[data-tag]').forEach(b => b.addEventListener('click', () => {
     const t = $('text'), tag = ' ' + b.dataset.tag + ' ';
     const st = t.selectionStart ?? t.value.length, en = t.selectionEnd ?? t.value.length;
     t.value = t.value.slice(0, st) + tag + t.value.slice(en);
     t.focus(); t.selectionStart = t.selectionEnd = st + tag.length;
     $('n').textContent = t.value.length;
   }));
+  document.querySelectorAll('.harakat button').forEach(b => b.addEventListener('click', () => {
+    const t = $('text'), h = b.dataset.h;
+    const st = t.selectionStart ?? t.value.length;
+    t.value = t.value.slice(0, st) + h + t.value.slice(t.selectionEnd ?? st);
+    t.focus(); t.selectionStart = t.selectionEnd = st + h.length;
+    $('n').textContent = t.value.length;
+  }));
+  // ---- قاموس النطق (محفوظ في المتصفح) ----
+  let lexicon = {};
+  try { lexicon = JSON.parse(localStorage.getItem('lexicon') || '{}') || {}; } catch {}
+  const DIALECT_HINTS = {
+    auto: 'كل جملة على حسبها: لو فيها كلام عامي (مش، إيه، عايز، دلوقتي...) تتقري مصري (قلبي ← ألبي)، ولو فصحى تتقري فصحى والقاف قاف.',
+    egyptian: 'كل الكلام يتقري عامية مصرية: القاف همزة (قلبي ← ألبي)، وكتير، وتلاتة...',
+    fusha: 'الكلام يتقري زي ما هو مكتوب بالظبط. شكّل الكلمات عشان النطق يبقى مظبوط.',
+  };
+  try { const d = localStorage.getItem('dialect'); if (d && DIALECT_HINTS[d]) $('dialect').value = d; } catch {}
+  const showDialect = () => { $('dialectHint').textContent = DIALECT_HINTS[$('dialect').value]; };
+  $('dialect').addEventListener('change', () => { try { localStorage.setItem('dialect', $('dialect').value); } catch {} showDialect(); });
+  showDialect();
+  function saveLex() { try { localStorage.setItem('lexicon', JSON.stringify(lexicon)); } catch {} renderLex(); }
+  function renderLex() {
+    const box = $('lexList'); box.innerHTML = '';
+    Object.entries(lexicon).forEach(([w, p]) => {
+      const row = document.createElement('div'); row.className = 'lexrow';
+      const a = document.createElement('b'); a.textContent = w;
+      const ar = document.createElement('span'); ar.textContent = '←';
+      const c = document.createElement('b'); c.textContent = p;
+      const x = document.createElement('button'); x.type = 'button'; x.className = 'del'; x.textContent = 'امسح';
+      x.onclick = () => { delete lexicon[w]; saveLex(); };
+      row.append(a, ar, c, x); box.append(row);
+    });
+  }
+  $('lexAdd').onclick = () => {
+    const w = $('lexW').value.trim().replace(/[\u064B-\u0652\u0670]/g, ''), p = $('lexP').value.trim();
+    if (!w || !p) { $('err').textContent = 'اكتب الكلمة وإزاي تتنطق'; return; }
+    lexicon[w] = p; $('lexW').value = ''; $('lexP').value = ''; $('err').textContent = ''; saveLex();
+  };
+  renderLex();
   let lastUrl;
   $('go').addEventListener('click', async () => {
     const text = $('text').value.trim();
@@ -303,11 +380,11 @@
     try {
       const res = await fetch('/api/tts', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(engine === 'edge'
+        body: JSON.stringify(Object.assign({ lexicon, dialect: $('dialect').value }, engine === 'edge'
           ? { engine, text, voice: $('voice').value, rate: $('rate').value, pitch: $('pitch').value,
               mood: $('mood').value, auto: $('auto').checked ? 1 : 0 }
           : { engine, text, api_key: $('key').value, voice_id: $('evid').value,
-              model: $('model').value, stability: $('stab').value })
+              model: $('model').value, stability: $('stab').value }))
       });
       if (!res.ok) {
         let msg = 'حصلت مشكلة';

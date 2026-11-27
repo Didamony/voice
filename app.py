@@ -12,6 +12,7 @@ import re
 
 import edge_tts
 import expressive
+import pronounce
 import requests
 from flask import Flask, jsonify, render_template, request, send_file
 
@@ -169,6 +170,11 @@ def tts():
 
     if not re.search(r"\w", _EMOJI.sub("", text)):
         return jsonify(error="اكتب كلام مش إيموجي بس"), 400
+
+    # النطق: التشكيل بيفضل زي ما هو، وقاموس المستخدم والنطق المصري بيتطبقوا
+    lexicon = pronounce.sanitize_lexicon(data.get("lexicon") if request.is_json else None)
+    dialect = data.get("dialect") if data.get("dialect") in ("auto", "egyptian", "fusha") else "auto"
+    text = pronounce.apply(text, lexicon, dialect)
 
     engine = data.get("engine", "edge")
     try:
