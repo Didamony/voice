@@ -21,8 +21,10 @@ EDGE_VOICES = {
 ELEVEN_API = "https://api.elevenlabs.io/v1"
 ELEVEN_MODELS = {"eleven_v3", "eleven_multilingual_v2"}
 MAX_CHARS = 5000
+MAX_CLONE_FILES = 25
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 60 * 1024 * 1024  # 60MB للتسجيلات
 
 
 def _clamp_int(value, lo, hi, default=0):
@@ -102,6 +104,46 @@ def eleven_voices():
     voices = [{"id": v["voice_id"], "name": v.get("name", v["voice_id"])}
               for v in r.json().get("voices", [])]
     return jsonify(voices=voices)
+
+
+@app.post("/api/eleven/clone")
+def eleven_clone():
+    """يعمل نسخة من صوت المستخدم (Instant Voice Cloning) ويرجّع voice_id."""
+    form = request.form
+    key = _eleven_key(form)
+    if not key:
+        return jsonify(error="محتاج ElevenLabs API key"), 400
+    if form.get("consent") != "yes":
+        return jsonify(error="لازم تأكد إن الصوت ده صوتك إنت أو معاك إذن صاحبه"), 400
+    files = [f for f in request.files.getlist("files") if f and f.filename]
+    if not files:
+        return jsonify(error="سجّل صوتك أو ارفع ملف صوت الأول"), 400
+    if len(files) > MAX_CLONE_FILES:
+        return jsonify(error=f"أقصى عدد {MAX_CLONE_FILES} ملف"), 400
+    name = (form.get("name") or "").strip()[:80] or "صوتي"
+
+    multipart = [("files", (f.filename, f.stream.read(), f.mimetype or "application/octet-stream"))
+                 for f in files]
+    try:
+        r = requests.post(
+            f"{ELEVEN_API}/voices/add",
+            headers={"xi-api-key": key},
+            data={"name": name, "remove_background_noise": "true",
+                  "description": "Egyptian Arabic voice clone",
+                  "labels": '{"accent": "egyptian", "language": "ar"}'},
+            files=multipart,
+            timeout=180,
+        )
+    except requests.RequestException as exc:
+        return jsonify(error=f"مش قادر أوصل لـ ElevenLabs: {exc}"), 502
+    if r.status_code != 200:
+        try:
+            detail = r.json().get("detail")
+            msg = detail.get("message") if isinstance(detail, dict) else detail
+        except ValueError:
+            msg = r.text[:200]
+        return jsonify(error=f"ElevenLabs رفض عمل النسخة ({r.status_code}): {msg}"), 502
+    return jsonify(voice_id=r.json().get("voice_id"), name=name)
 
 
 @app.post("/api/tts")
