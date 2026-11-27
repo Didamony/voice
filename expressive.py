@@ -152,8 +152,9 @@ def plan(text, voice="salma", mood="normal", auto=True, user_rate=0, user_pitch=
                 r -= 20; p -= 10; v -= 14
             elif style == "whisper":
                 r -= 8; p -= 4; v -= 35
-            r += user_rate
-            p = p * hz + user_pitch
+            # مايخليش التأثيرات تتراكم لدرجة إن الكلام يبقى بطيء أو سريع زيادة
+            r = max(-28, min(40, r)) + user_rate
+            p = max(-20, min(30, p)) * hz + user_pitch
             if style == "sarcastic":
                 events.extend(_sarcastic(spoken, r, p, v, hz))
                 events.append(("laugh", "scoff"))

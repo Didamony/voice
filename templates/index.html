@@ -372,27 +372,67 @@
   };
   renderLex();
   let lastUrl;
+  // الكلام الطويل بيتبعت على أجزاء صغيرة عشان السيرفر المجاني مايقطعش الطلب
+  function splitText(text, max) {
+    const units = text.match(/[^\n.!?؟…]+(?:\.\.\.|[.!?؟…]+)?\s*|\n+/g) || [text];
+    const chunks = []; let cur = '';
+    for (const u of units) {
+      if (cur && (cur + u).length > max) { chunks.push(cur); cur = ''; }
+      if (u.length > max) {                       // جملة طويلة جدًا من غير نقط: قسّمها عند الفواصل/المسافات
+        let rest = u;
+        while (rest.length > max) {
+          let cut = Math.max(rest.lastIndexOf('،', max), rest.lastIndexOf(',', max), rest.lastIndexOf(' ', max));
+          if (cut < max / 3) cut = max;
+          chunks.push(rest.slice(0, cut + 1)); rest = rest.slice(cut + 1);
+        }
+        cur = rest;
+      } else cur += u;
+    }
+    if (cur.trim()) chunks.push(cur);
+    return chunks.filter(c => c.trim());
+  }
+  function errorText(status, body) {
+    if (body && body.error) return body.error;
+    if (status === 504 || status === 408) return 'السيرفر اتأخر في الرد. جرّب تاني، ولو اتكرر قسّم الكلام لأجزاء أصغر.';
+    if (status === 413) return 'الطلب كبير أوي على السيرفر.';
+    if (status >= 500) return `حصلت مشكلة في السيرفر (${status}). جرّب تاني بعد شوية.`;
+    return `حصلت مشكلة (${status}).`;
+  }
   $('go').addEventListener('click', async () => {
     const text = $('text').value.trim();
     $('err').textContent = '';
     if (!text) { $('err').textContent = 'اكتب أي كلام الأول'; return; }
-    $('go').disabled = true; $('go').textContent = 'بيتحوّل...';
-    try {
-      const res = await fetch('/api/tts', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(Object.assign({ lexicon, dialect: $('dialect').value }, engine === 'edge'
-          ? { engine, text, voice: $('voice').value, rate: $('rate').value, pitch: $('pitch').value,
-              mood: $('mood').value, auto: $('auto').checked ? 1 : 0 }
-          : { engine, text, api_key: $('key').value, voice_id: $('evid').value,
-              model: $('model').value, stability: $('stab').value }))
-      });
+    const chunks = splitText(text, engine === 'edge' ? 450 : 2000);
+    $('go').disabled = true;
+    const parts = new Array(chunks.length);
+    let done = 0;
+    const label = () => { $('go').textContent = chunks.length > 1 ? `بيتحوّل... ${done} من ${chunks.length}` : 'بيتحوّل...'; };
+    async function one(i) {
+      let res;
+      try {
+        res = await fetch('/api/tts', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(Object.assign({ lexicon, dialect: $('dialect').value }, engine === 'edge'
+            ? { engine, text: chunks[i], voice: $('voice').value, rate: $('rate').value, pitch: $('pitch').value,
+                mood: $('mood').value, auto: $('auto').checked ? 1 : 0 }
+            : { engine, text: chunks[i], api_key: $('key').value, voice_id: $('evid').value,
+                model: $('model').value, stability: $('stab').value }))
+        });
+      } catch { throw new Error('مفيش اتصال بالسيرفر. اتأكد من النت وجرّب تاني.'); }
       if (!res.ok) {
-        let msg = 'حصلت مشكلة';
-        try { msg = (await res.json()).error || msg; } catch {}
-        throw new Error(msg);
+        let body = null; try { body = await res.json(); } catch {}
+        throw new Error((chunks.length > 1 ? `الجزء ${i + 1} من ${chunks.length}: ` : '') + errorText(res.status, body));
       }
+      parts[i] = await res.blob();
+      done++; label();
+    }
+    try {
+      label();
+      let next = 0;
+      const worker = async () => { while (next < chunks.length) await one(next++); };
+      await Promise.all(Array.from({ length: Math.min(3, chunks.length) }, worker));
       if (engine === 'eleven') { store.set('xi_key', $('key').value); store.set('xi_voice', $('evid').value); }
-      const blob = await res.blob();
+      const blob = new Blob(parts, { type: 'audio/mpeg' });
       if (lastUrl) URL.revokeObjectURL(lastUrl);
       lastUrl = URL.createObjectURL(blob);
       $('player').src = lastUrl; $('dl').href = lastUrl;
