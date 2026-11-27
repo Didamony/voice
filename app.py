@@ -83,6 +83,14 @@ def eleven_synthesize(text, api_key, voice_id, model_id, stability, style):
     return r.content
 
 
+@app.get("/sw.js")
+def service_worker():
+    resp = app.send_static_file("sw.js")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["Service-Worker-Allowed"] = "/"
+    return resp
+
+
 @app.get("/")
 def index():
     return render_template("index.html", max_chars=MAX_CHARS,
