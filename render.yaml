@@ -3,3 +3,6 @@ services:
     name: egyptian-voice
     runtime: docker
     plan: free
+    envVars:
+      - key: ELEVENLABS_API_KEY
+        sync: false

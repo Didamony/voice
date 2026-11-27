@@ -29,6 +29,14 @@
   .out { margin-top:20px; display:none; }
   .out audio { width:100%; }
   .out a { display:inline-block; margin-top:8px; color:var(--accent); font-weight:700; }
+  .tabs { display:flex; gap:8px; margin-top:16px; }
+  .tabs button { margin:0; padding:10px; font-size:1rem; background:transparent; color:var(--ink);
+                 border:1px solid var(--line); }
+  .tabs button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .hint { color:var(--muted); font-size:.85rem; font-weight:400; }
+  input[type=text], input[type=password] { font:inherit; padding:8px; border-radius:10px;
+      border:1px solid var(--line); background:transparent; color:inherit; }
+  .small { margin-top:0; width:auto; padding:8px 12px; font-size:.95rem; }
   .err { color:var(--accent); margin-top:12px; min-height:1em; }
 </style>
 </head>
@@ -39,7 +47,11 @@
   <div class="card">
     <textarea id="text" maxlength="{{ max_chars }}" placeholder="مثلاً: إزيك يا صاحبي؟ عامل إيه النهارده؟ وحشتني والله."></textarea>
     <div class="count" dir="ltr"><span id="n">0</span> / {{ max_chars }}</div>
-    <div class="row">
+    <div class="tabs">
+      <button type="button" id="tEdge" class="on">مايكروسوفت (مجاني)</button>
+      <button type="button" id="tEleven">ElevenLabs (فيه روح)</button>
+    </div>
+    <div class="row" id="edgeBox">
       <label>الصوت
         <select id="voice">
           <option value="salma">سلمى (ست)</option>
@@ -52,6 +64,35 @@
       <label>طبقة الصوت: <span id="pitchV">0</span>
         <input id="pitch" type="range" min="-50" max="50" value="0" step="5">
       </label>
+    </div>
+    <div id="elevenBox" style="display:none">
+      <div class="row">
+        <label>ElevenLabs API key
+          <input id="key" type="password" placeholder="{{ 'متسجّل على السيرفر' if server_key else 'sk_...' }}" autocomplete="off">
+          <span class="hint">بيتحفظ في المتصفح بتاعك بس</span>
+        </label>
+      </div>
+      <div class="row">
+        <label>الصوت
+          <select id="evoice"><option value="">— دوس "هات أصواتي" —</option></select>
+          <button type="button" class="small" id="loadV">هات أصواتي</button>
+          <input id="evid" type="text" placeholder="أو حط Voice ID هنا" dir="ltr">
+          <span class="hint">اختار صوت مصري من الـ Voice Library في ElevenLabs وضيفه لحسابك</span>
+        </label>
+      </div>
+      <div class="row">
+        <label>الموديل
+          <select id="model">
+            <option value="eleven_v3">eleven_v3 (أكتر إحساس)</option>
+            <option value="eleven_multilingual_v2">multilingual_v2 (أثبت)</option>
+          </select>
+        </label>
+        <label>الثبات: <span id="stabV">0.5</span>
+          <input id="stab" type="range" min="0" max="1" step="0.5" value="0.5">
+          <span class="hint">أقل = تعبير أكتر</span>
+        </label>
+      </div>
+      <p class="hint">💡 مع eleven_v3 تقدر تكتب تاجات زي [laughs] أو [whispers] أو [excited] جوه الكلام.</p>
     </div>
     <button id="go">حوّل لصوت</button>
     <div class="err" id="err"></div>
@@ -66,6 +107,36 @@
   $('text').addEventListener('input', e => $('n').textContent = e.target.value.length);
   $('rate').addEventListener('input', e => $('rateV').textContent = e.target.value + '%');
   $('pitch').addEventListener('input', e => $('pitchV').textContent = e.target.value);
+  let engine = 'edge';
+  const store = { get(k){ try { return localStorage.getItem(k) || ''; } catch { return ''; } },
+                  set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+  $('key').value = store.get('xi_key'); $('evid').value = store.get('xi_voice');
+  function setEngine(e) {
+    engine = e;
+    $('tEdge').classList.toggle('on', e==='edge'); $('tEleven').classList.toggle('on', e==='eleven');
+    $('edgeBox').style.display = e==='edge' ? '' : 'none';
+    $('elevenBox').style.display = e==='eleven' ? '' : 'none';
+  }
+  $('tEdge').onclick = () => setEngine('edge');
+  $('tEleven').onclick = () => setEngine('eleven');
+  $('stab').addEventListener('input', e => $('stabV').textContent = e.target.value);
+  $('model').addEventListener('change', e => {
+    const v3 = e.target.value === 'eleven_v3';
+    $('stab').step = v3 ? '0.5' : '0.05';
+  });
+  $('evoice').addEventListener('change', e => { if (e.target.value) $('evid').value = e.target.value; });
+  $('loadV').onclick = async () => {
+    $('err').textContent = '';
+    try {
+      const res = await fetch('/api/eleven/voices', { method:'POST', headers:{'Content-Type':'application/json'},
+                                body: JSON.stringify({ api_key: $('key').value }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'حصلت مشكلة');
+      $('evoice').innerHTML = '<option value="">— اختار صوت —</option>' +
+        j.voices.map(v => `<option value="${v.id}">${v.name.replace(/</g,'&lt;')}</option>`).join('');
+      store.set('xi_key', $('key').value);
+    } catch (e) { $('err').textContent = e.message; }
+  };
   let lastUrl;
   $('go').addEventListener('click', async () => {
     const text = $('text').value.trim();
@@ -75,13 +146,17 @@
     try {
       const res = await fetch('/api/tts', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ text, voice: $('voice').value, rate: $('rate').value, pitch: $('pitch').value })
+        body: JSON.stringify(engine === 'edge'
+          ? { engine, text, voice: $('voice').value, rate: $('rate').value, pitch: $('pitch').value }
+          : { engine, text, api_key: $('key').value, voice_id: $('evid').value,
+              model: $('model').value, stability: $('stab').value })
       });
       if (!res.ok) {
         let msg = 'حصلت مشكلة';
         try { msg = (await res.json()).error || msg; } catch {}
         throw new Error(msg);
       }
+      if (engine === 'eleven') { store.set('xi_key', $('key').value); store.set('xi_voice', $('evid').value); }
       const blob = await res.blob();
       if (lastUrl) URL.revokeObjectURL(lastUrl);
       lastUrl = URL.createObjectURL(blob);
