@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>صوت مصري</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#f6f3ee; --card:#fff; --ink:#1f1f1f; --muted:#6b6b6b; --accent:#c0392b; --line:#e4ded4; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#151515; --card:#1f1f1f; --ink:#f1f1f1; --muted:#a0a0a0; --accent:#e85c4a; --line:#333; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:"Cairo",system-ui,sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:32px 16px; }
+  h1 { margin:0 0 4px; font-size:2rem; }
+  p.sub { margin:0 0 24px; color:var(--muted); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px; }
+  textarea { width:100%; min-height:180px; resize:vertical; font:inherit; font-size:1.1rem; padding:12px;
+             border:1px solid var(--line); border-radius:12px; background:transparent; color:inherit; }
+  .count { text-align:left; color:var(--muted); font-size:.85rem; margin-top:4px; }
+  .row { display:flex; flex-wrap:wrap; gap:16px; margin-top:16px; }
+  .row > label { flex:1 1 180px; display:flex; flex-direction:column; gap:6px; font-weight:700; }
+  select, input[type=range] { font:inherit; }
+  select { padding:8px; border-radius:10px; border:1px solid var(--line); background:transparent; color:inherit; }
+  button { margin-top:20px; width:100%; padding:14px; font:inherit; font-size:1.15rem; font-weight:700;
+           border:0; border-radius:12px; background:var(--accent); color:#fff; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .out { margin-top:20px; display:none; }
+  .out audio { width:100%; }
+  .out a { display:inline-block; margin-top:8px; color:var(--accent); font-weight:700; }
+  .tabs { display:flex; gap:8px; margin-top:16px; }
+  .tabs button { margin:0; padding:10px; font-size:1rem; background:transparent; color:var(--ink);
+                 border:1px solid var(--line); }
+  .tabs button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .hint { color:var(--muted); font-size:.85rem; font-weight:400; }
+  input[type=text], input[type=password] { font:inherit; padding:8px; border-radius:10px;
+      border:1px solid var(--line); background:transparent; color:inherit; }
+  .small { margin-top:0; width:auto; padding:8px 12px; font-size:.95rem; }
+  .clone { margin-top:16px; border:1px dashed var(--line); border-radius:12px; padding:12px; }
+  .clone summary { cursor:pointer; font-weight:700; }
+  .script { background:var(--bg); border-radius:10px; padding:10px; line-height:1.9; }
+  .rec { display:flex; align-items:center; gap:12px; }
+  .clip { display:flex; align-items:center; gap:8px; margin-top:8px; }
+  .clip audio { flex:1; min-width:0; }
+  .clip button { margin:0; width:auto; padding:6px 10px; font-size:.9rem; }
+  .lbl { display:flex; flex-direction:column; gap:6px; margin-top:12px; font-weight:700; }
+  .chk { display:flex; gap:8px; align-items:flex-start; margin-top:12px; }
+  .err { color:var(--accent); margin-top:12px; min-height:1em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🎙️ صوت مصري</h1>
+  <p class="sub">اكتب أي كلام وهيتحول لصوت باللهجة المصرية</p>
+  <div class="card">
+    <textarea id="text" maxlength="{{ max_chars }}" placeholder="مثلاً: إزيك يا صاحبي؟ عامل إيه النهارده؟ وحشتني والله."></textarea>
+    <div class="count" dir="ltr"><span id="n">0</span> / {{ max_chars }}</div>
+    <div class="tabs">
+      <button type="button" id="tEdge" class="on">مايكروسوفت (مجاني)</button>
+      <button type="button" id="tEleven">ElevenLabs (فيه روح)</button>
+    </div>
+    <div class="row" id="edgeBox">
+      <label>الصوت
+        <select id="voice">
+          <option value="salma">سلمى (ست)</option>
+          <option value="shakir">شاكر (راجل)</option>
+        </select>
+      </label>
+      <label>السرعة: <span id="rateV">0%</span>
+        <input id="rate" type="range" min="-50" max="100" value="0" step="5">
+      </label>
+      <label>طبقة الصوت: <span id="pitchV">0</span>
+        <input id="pitch" type="range" min="-50" max="50" value="0" step="5">
+      </label>
+    </div>
+    <div id="elevenBox" style="display:none">
+      <div class="row">
+        <label>ElevenLabs API key
+          <input id="key" type="password" placeholder="{{ 'متسجّل على السيرفر' if server_key else 'sk_...' }}" autocomplete="off">
+          <span class="hint">بيتحفظ في المتصفح بتاعك بس</span>
+        </label>
+      </div>
+      <div class="row">
+        <label>الصوت
+          <select id="evoice"><option value="">— دوس "هات أصواتي" —</option></select>
+          <button type="button" class="small" id="loadV">هات أصواتي</button>
+          <input id="evid" type="text" placeholder="أو حط Voice ID هنا" dir="ltr">
+          <span class="hint">اختار صوت مصري من الـ Voice Library في ElevenLabs وضيفه لحسابك</span>
+        </label>
+      </div>
+      <details id="cloneBox" class="clone">
+        <summary>🎤 اعمل صوت بنبرتك إنت</summary>
+        <p class="hint">سجّل صوتك دقيقة لدقيقتين وإنت بتتكلم عادي بطريقتك، في مكان هادي.
+          كل ما تتكلم على طبيعتك، النسخة هتطلع شبهك أكتر. (محتاج اشتراك ElevenLabs مدفوع - باقة Starter أو أعلى)</p>
+        <p class="script">لو مش عارف تقول إيه، اقرا ده بطريقتك:<br>
+          «بص يا سيدي، أنا النهارده صحيت متأخر كالعادة، ونزلت جري عشان ألحق الشغل.
+          الطريق كان زحمة موت، والميكروباص وقف في كل حتة. بس الحمد لله وصلت،
+          وأول ما دخلت لقيت المدير مستنيني... قولتله والله يا فندم الزحمة النهارده مش طبيعية!
+          المهم، بالليل قعدت مع صحابي على القهوة وضحكنا لحد ما عيطنا.»</p>
+        <div class="rec">
+          <button type="button" class="small" id="recBtn">⏺️ ابدأ التسجيل</button>
+          <span id="recT" dir="ltr">0:00</span>
+        </div>
+        <div id="clips"></div>
+        <label class="lbl">أو ارفع تسجيلات عندك (mp3, wav, m4a...)
+          <input id="upl" type="file" accept="audio/*" multiple>
+        </label>
+        <label class="lbl">اسم الصوت
+          <input id="cname" type="text" value="صوتي">
+        </label>
+        <label class="chk"><input id="consent" type="checkbox"> أأكد إن الصوت ده صوتي أنا (أو معايا إذن صريح من صاحبه)</label>
+        <button type="button" id="cloneBtn">اعمل نسخة من صوتي</button>
+      </details>
+      <div class="row">
+        <label>الموديل
+          <select id="model">
+            <option value="eleven_v3">eleven_v3 (أكتر إحساس)</option>
+            <option value="eleven_multilingual_v2">multilingual_v2 (أثبت)</option>
+          </select>
+        </label>
+        <label>الثبات: <span id="stabV">0.5</span>
+          <input id="stab" type="range" min="0" max="1" step="0.5" value="0.5">
+          <span class="hint">أقل = تعبير أكتر</span>
+        </label>
+      </div>
+      <p class="hint">💡 مع eleven_v3 تقدر تكتب تاجات زي [laughs] أو [whispers] أو [excited] جوه الكلام.</p>
+    </div>
+    <button id="go">حوّل لصوت</button>
+    <div class="err" id="err"></div>
+    <div class="out" id="out">
+      <audio id="player" controls></audio>
+      <a id="dl" download="voice.mp3">⬇️ نزّل الصوت MP3</a>
+    </div>
+  </div>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  $('text').addEventListener('input', e => $('n').textContent = e.target.value.length);
+  $('rate').addEventListener('input', e => $('rateV').textContent = e.target.value + '%');
+  $('pitch').addEventListener('input', e => $('pitchV').textContent = e.target.value);
+  let engine = 'edge';
+  const store = { get(k){ try { return localStorage.getItem(k) || ''; } catch { return ''; } },
+                  set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+  $('key').value = store.get('xi_key'); $('evid').value = store.get('xi_voice');
+  function setEngine(e) {
+    engine = e;
+    $('tEdge').classList.toggle('on', e==='edge'); $('tEleven').classList.toggle('on', e==='eleven');
+    $('edgeBox').style.display = e==='edge' ? '' : 'none';
+    $('elevenBox').style.display = e==='eleven' ? '' : 'none';
+  }
+  $('tEdge').onclick = () => setEngine('edge');
+  $('tEleven').onclick = () => setEngine('eleven');
+  $('stab').addEventListener('input', e => $('stabV').textContent = e.target.value);
+  $('model').addEventListener('change', e => {
+    const v3 = e.target.value === 'eleven_v3';
+    $('stab').step = v3 ? '0.5' : '0.05';
+  });
+  $('evoice').addEventListener('change', e => { if (e.target.value) $('evid').value = e.target.value; });
+  $('loadV').onclick = async () => {
+    $('err').textContent = '';
+    try {
+      const res = await fetch('/api/eleven/voices', { method:'POST', headers:{'Content-Type':'application/json'},
+                                body: JSON.stringify({ api_key: $('key').value }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'حصلت مشكلة');
+      $('evoice').innerHTML = '<option value="">— اختار صوت —</option>' +
+        j.voices.map(v => `<option value="${v.id}">${v.name.replace(/</g,'&lt;')}</option>`).join('');
+      store.set('xi_key', $('key').value);
+    } catch (e) { $('err').textContent = e.message; }
+  };
+  // ---- تسجيل الصوت وعمل نسخة منه ----
+  const clips = [];
+  let rec, recStart, recTimer;
+  function renderClips() {
+    $('clips').innerHTML = '';
+    clips.forEach((c, i) => {
+      const d = document.createElement('div'); d.className = 'clip';
+      const a = document.createElement('audio'); a.controls = true; a.src = c.url;
+      const x = document.createElement('button'); x.type = 'button'; x.textContent = 'امسح';
+      x.onclick = () => { URL.revokeObjectURL(c.url); clips.splice(i, 1); renderClips(); };
+      d.append(a, x); $('clips').append(d);
+    });
+  }
+  $('recBtn').onclick = async () => {
+    if (rec && rec.state === 'recording') { rec.stop(); return; }
+    $('err').textContent = '';
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+    catch { $('err').textContent = 'مش قادر أفتح المايك - اسمح للمتصفح يستخدمه'; return; }
+    const chunks = [];
+    rec = new MediaRecorder(stream);
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    rec.onstop = () => {
+      stream.getTracks().forEach(t => t.stop()); clearInterval(recTimer);
+      $('recBtn').textContent = '⏺️ سجّل تاني';
+      const type = rec.mimeType || 'audio/webm';
+      const ext = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+      const blob = new Blob(chunks, { type });
+      clips.push({ blob, url: URL.createObjectURL(blob), name: `rec${clips.length + 1}.${ext}` });
+      renderClips();
+    };
+    rec.start(); recStart = Date.now();
+    $('recBtn').textContent = '⏹️ وقّف التسجيل';
+    recTimer = setInterval(() => {
+      const s = Math.floor((Date.now() - recStart) / 1000);
+      $('recT').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    }, 250);
+  };
+  $('cloneBtn').onclick = async () => {
+    $('err').textContent = '';
+    const fd = new FormData();
+    fd.append('api_key', $('key').value);
+    fd.append('name', $('cname').value);
+    fd.append('consent', $('consent').checked ? 'yes' : 'no');
+    clips.forEach(c => fd.append('files', c.blob, c.name));
+    [...$('upl').files].forEach(f => fd.append('files', f, f.name));
+    $('cloneBtn').disabled = true; $('cloneBtn').textContent = 'بيتعمل...';
+    try {
+      const res = await fetch('/api/eleven/clone', { method: 'POST', body: fd });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'حصلت مشكلة');
+      const o = document.createElement('option'); o.value = j.voice_id; o.textContent = j.name + ' (صوتك)';
+      $('evoice').append(o); $('evoice').value = j.voice_id; $('evid').value = j.voice_id;
+      store.set('xi_key', $('key').value); store.set('xi_voice', j.voice_id);
+      $('cloneBox').open = false;
+      $('err').textContent = '✅ صوتك جاهز! اكتب أي كلام ودوس حوّل لصوت';
+    } catch (e) { $('err').textContent = e.message; }
+    finally { $('cloneBtn').disabled = false; $('cloneBtn').textContent = 'اعمل نسخة من صوتي'; }
+  };
+  let lastUrl;
+  $('go').addEventListener('click', async () => {
+    const text = $('text').value.trim();
+    $('err').textContent = '';
+    if (!text) { $('err').textContent = 'اكتب أي كلام الأول'; return; }
+    $('go').disabled = true; $('go').textContent = 'بيتحوّل...';
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(engine === 'edge'
+          ? { engine, text, voice: $('voice').value, rate: $('rate').value, pitch: $('pitch').value }
+          : { engine, text, api_key: $('key').value, voice_id: $('evid').value,
+              model: $('model').value, stability: $('stab').value })
+      });
+      if (!res.ok) {
+        let msg = 'حصلت مشكلة';
+        try { msg = (await res.json()).error || msg; } catch {}
+        throw new Error(msg);
+      }
+      if (engine === 'eleven') { store.set('xi_key', $('key').value); store.set('xi_voice', $('evid').value); }
+      const blob = await res.blob();
+      if (lastUrl) URL.revokeObjectURL(lastUrl);
+      lastUrl = URL.createObjectURL(blob);
+      $('player').src = lastUrl; $('dl').href = lastUrl;
+      $('out').style.display = 'block';
+      $('player').play().catch(() => {});
+    } catch (e) {
+      $('err').textContent = e.message;
+    } finally {
+      $('go').disabled = false; $('go').textContent = 'حوّل لصوت';
+    }
+  });
+</script>
+</body>
+</html>
