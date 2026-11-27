@@ -6,14 +6,23 @@
 - **سلمى** `ar-EG-SalmaNeural` — صوت ست
 - **شاكر** `ar-EG-ShakirNeural` — صوت راجل
 
-## التشغيل
+## التشغيل على الكمبيوتر (لازم يكون عليه Python 3 ونت)
 
+- **ويندوز:** دبل كليك على `run.bat`
+- **ماك / لينكس:** `./run.sh`
+
+هينزّل المكتبات لوحده ويفتح المتصفح على http://localhost:5000
+
+أو يدوي:
 ```bash
 pip install -r requirements.txt
 python app.py
 ```
 
-وافتح المتصفح على: http://localhost:5000
+## تشغيله أونلاين (عشان تفتحه من الموبايل)
+
+المشروع فيه `Dockerfile` و`render.yaml`، فتقدر ترفعه مجانًا على [Render](https://render.com):
+New → Blueprint → اختار الريبو ده → Deploy. هيديك لينك تفتحه من أي موبايل.
 
 ## الـ API
 
