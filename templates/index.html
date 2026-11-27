@@ -100,6 +100,16 @@
           <option value="shakir">شاكر (راجل)</option>
         </select>
       </label>
+      <label>الإحساس
+        <select id="mood">
+          <option value="normal">عادي</option>
+          <option value="excited">متحمس 🤩</option>
+          <option value="calm">هادي 😌</option>
+          <option value="sad">حزين 😔</option>
+          <option value="story">بيحكي حكاية 📖</option>
+        </select>
+        <span class="hint"><input type="checkbox" id="auto" checked> تعبير تلقائي حسب علامات الترقيم</span>
+      </label>
       <label>السرعة: <span id="rateV">0%</span>
         <input id="rate" type="range" min="-50" max="100" value="0" step="5">
       </label>
@@ -107,6 +117,7 @@
         <input id="pitch" type="range" min="-50" max="50" value="0" step="5">
       </label>
     </div>
+    <p class="hint" id="edgeTip">💡 عشان الصوت يبقى فيه روح: استخدم ؟ و ! و ... في كلامك، وحط 😂 لو جملة فيها ضحك أو 😢 لو حزينة.</p>
     <div id="elevenBox" style="display:none">
       <div class="row">
         <label>ElevenLabs API key
@@ -180,6 +191,7 @@
     engine = e;
     $('tEdge').classList.toggle('on', e==='edge'); $('tEleven').classList.toggle('on', e==='eleven');
     $('edgeBox').style.display = e==='edge' ? '' : 'none';
+    $('edgeTip').style.display = e==='edge' ? '' : 'none';
     $('elevenBox').style.display = e==='eleven' ? '' : 'none';
   }
   $('tEdge').onclick = () => setEngine('edge');
@@ -271,7 +283,8 @@
       const res = await fetch('/api/tts', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(engine === 'edge'
-          ? { engine, text, voice: $('voice').value, rate: $('rate').value, pitch: $('pitch').value }
+          ? { engine, text, voice: $('voice').value, rate: $('rate').value, pitch: $('pitch').value,
+              mood: $('mood').value, auto: $('auto').checked ? 1 : 0 }
           : { engine, text, api_key: $('key').value, voice_id: $('evid').value,
               model: $('model').value, stability: $('stab').value })
       });
