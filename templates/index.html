@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>صوت مصري</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#f6f3ee; --card:#fff; --ink:#1f1f1f; --muted:#6b6b6b; --accent:#c0392b; --line:#e4ded4; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#151515; --card:#1f1f1f; --ink:#f1f1f1; --muted:#a0a0a0; --accent:#e85c4a; --line:#333; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:"Cairo",system-ui,sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:32px 16px; }
+  h1 { margin:0 0 4px; font-size:2rem; }
+  p.sub { margin:0 0 24px; color:var(--muted); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px; }
+  textarea { width:100%; min-height:180px; resize:vertical; font:inherit; font-size:1.1rem; padding:12px;
+             border:1px solid var(--line); border-radius:12px; background:transparent; color:inherit; }
+  .count { text-align:left; color:var(--muted); font-size:.85rem; margin-top:4px; }
+  .row { display:flex; flex-wrap:wrap; gap:16px; margin-top:16px; }
+  .row > label { flex:1 1 180px; display:flex; flex-direction:column; gap:6px; font-weight:700; }
+  select, input[type=range] { font:inherit; }
+  select { padding:8px; border-radius:10px; border:1px solid var(--line); background:transparent; color:inherit; }
+  button { margin-top:20px; width:100%; padding:14px; font:inherit; font-size:1.15rem; font-weight:700;
+           border:0; border-radius:12px; background:var(--accent); color:#fff; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .out { margin-top:20px; display:none; }
+  .out audio { width:100%; }
+  .out a { display:inline-block; margin-top:8px; color:var(--accent); font-weight:700; }
+  .err { color:var(--accent); margin-top:12px; min-height:1em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🎙️ صوت مصري</h1>
+  <p class="sub">اكتب أي كلام وهيتحول لصوت باللهجة المصرية</p>
+  <div class="card">
+    <textarea id="text" maxlength="{{ max_chars }}" placeholder="مثلاً: إزيك يا صاحبي؟ عامل إيه النهارده؟ وحشتني والله."></textarea>
+    <div class="count"><span id="n">0</span> / {{ max_chars }}</div>
+    <div class="row">
+      <label>الصوت
+        <select id="voice">
+          <option value="salma">سلمى (ست)</option>
+          <option value="shakir">شاكر (راجل)</option>
+        </select>
+      </label>
+      <label>السرعة: <span id="rateV">0%</span>
+        <input id="rate" type="range" min="-50" max="100" value="0" step="5">
+      </label>
+      <label>طبقة الصوت: <span id="pitchV">0</span>
+        <input id="pitch" type="range" min="-50" max="50" value="0" step="5">
+      </label>
+    </div>
+    <button id="go">حوّل لصوت</button>
+    <div class="err" id="err"></div>
+    <div class="out" id="out">
+      <audio id="player" controls></audio>
+      <a id="dl" download="voice.mp3">⬇️ نزّل الصوت MP3</a>
+    </div>
+  </div>
+</main>
+<script>
+  const $ = id => document.getElementById(id);
+  $('text').addEventListener('input', e => $('n').textContent = e.target.value.length);
+  $('rate').addEventListener('input', e => $('rateV').textContent = e.target.value + '%');
+  $('pitch').addEventListener('input', e => $('pitchV').textContent = e.target.value);
+  let lastUrl;
+  $('go').addEventListener('click', async () => {
+    const text = $('text').value.trim();
+    $('err').textContent = '';
+    if (!text) { $('err').textContent = 'اكتب أي كلام الأول'; return; }
+    $('go').disabled = true; $('go').textContent = 'بيتحوّل...';
+    try {
+      const res = await fetch('/api/tts', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ text, voice: $('voice').value, rate: $('rate').value, pitch: $('pitch').value })
+      });
+      if (!res.ok) {
+        let msg = 'حصلت مشكلة';
+        try { msg = (await res.json()).error || msg; } catch {}
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      if (lastUrl) URL.revokeObjectURL(lastUrl);
+      lastUrl = URL.createObjectURL(blob);
+      $('player').src = lastUrl; $('dl').href = lastUrl;
+      $('out').style.display = 'block';
+      $('player').play().catch(() => {});
+    } catch (e) {
+      $('err').textContent = e.message;
+    } finally {
+      $('go').disabled = false; $('go').textContent = 'حوّل لصوت';
+    }
+  });
+</script>
+</body>
+</html>
