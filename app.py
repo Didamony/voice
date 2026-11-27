@@ -48,13 +48,73 @@ def _eleven_key(data):
     return (os.environ.get("ELEVENLABS_API_KEY") or (data.get("api_key") or "")).strip()
 
 
-async def edge_synthesize(text, voice, rate="+0%", pitch="+0Hz"):
-    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+async def edge_synthesize(text, voice, rate="+0%", pitch="+0Hz", volume="+0%"):
+    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, volume=volume)
     buf = io.BytesIO()
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
             buf.write(chunk["data"])
     return buf.getvalue()
+
+
+# ---- الإحساس: أصوات مايكروسوفت المصرية مافيهاش مشاعر جاهزة، فبنلعب في
+# السرعة وطبقة الصوت وعلوّه لكل جملة لوحدها عشان الكلام يبقى فيه حياة.
+MOODS = {  # (سرعة %، طبقة Hz، علو %، قد إيه الجمل بتختلف عن بعض)
+    "normal":  (0, 0, 0, 2),
+    "excited": (12, 6, 10, 4),
+    "calm":    (-10, -3, -8, 1),
+    "sad":     (-18, -8, -12, 1),
+    "story":   (-6, 0, 0, 5),
+}
+_ENDS = ".!?؟…😂🤣😆😅😢😭😔💔"
+_SENT = re.compile(rf"[^{_ENDS}\n]+(?:\.\.\.|[{_ENDS}]+)?|\n+")
+_EMOJI = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF\uFE0F]")
+_LAUGH = re.compile(r"(?:ه{3,}|😂|🤣|😆|😅)")
+_SAD = re.compile(r"(?:😢|😭|😔|💔|☹)")
+
+
+def split_expressive(text, mood="normal", auto=True):
+    """يقسّم الكلام لجمل ويدي كل جملة سرعة وطبقة وعلو حسب المود وشكل الجملة."""
+    base_r, base_p, base_v, swing = MOODS.get(mood, MOODS["normal"])
+    parts = [m.group(0).strip() for m in _SENT.finditer(text)]
+    parts = [x for x in parts if x]
+    out = []
+    for i, part in enumerate(parts):
+        r, pch, v = base_r, base_p, base_v
+        if auto:
+            # تنويع خفيف بين الجمل عشان مايبقاش الكلام على وتيرة واحدة
+            pch += swing if i % 2 else -swing // 2
+            end = part.rstrip()
+            if end.endswith(("؟", "?")):
+                pch += 6
+            if end.endswith("!"):
+                r += 8; pch += 4; v += 10
+            if end.endswith(("...", "…")):
+                r -= 10; pch -= 2
+            if _LAUGH.search(part):
+                r += 12; pch += 6; v += 5
+            if _SAD.search(part):
+                r -= 12; pch -= 6; v -= 8
+        spoken = _EMOJI.sub("", part).strip()
+        if not re.search(r"\w", spoken):
+            continue
+        out.append((spoken, max(-50, min(100, r)), max(-50, min(50, pch)), max(-50, min(50, v))))
+    return out
+
+
+async def edge_expressive(text, voice, mood, auto, user_rate, user_pitch):
+    segments = split_expressive(text, mood, auto) or [(text, 0, 0, 0)]
+    sem = asyncio.Semaphore(4)
+
+    async def one(seg):
+        spoken, r, pch, v = seg
+        r = max(-50, min(100, r + user_rate))
+        pch = max(-50, min(50, pch + user_pitch))
+        async with sem:
+            return await edge_synthesize(spoken, voice, f"{r:+d}%", f"{pch:+d}Hz", f"{v:+d}%")
+
+    chunks = await asyncio.gather(*(one(seg) for seg in segments))
+    return b"".join(chunks)  # ملفات MP3 بتتلزق ورا بعض عادي
 
 
 def eleven_synthesize(text, api_key, voice_id, model_id, stability, style):
@@ -81,6 +141,14 @@ def eleven_synthesize(text, api_key, voice_id, model_id, stability, style):
             msg = r.text[:200]
         raise RuntimeError(f"ElevenLabs ({r.status_code}): {msg}")
     return r.content
+
+
+@app.get("/sw.js")
+def service_worker():
+    resp = app.send_static_file("sw.js")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["Service-Worker-Allowed"] = "/"
+    return resp
 
 
 @app.get("/")
@@ -155,6 +223,9 @@ def tts():
     if len(text) > MAX_CHARS:
         return jsonify(error=f"الكلام طويل أوي، الحد الأقصى {MAX_CHARS} حرف"), 400
 
+    if not re.search(r"\w", _EMOJI.sub("", text)):
+        return jsonify(error="اكتب كلام مش إيموجي بس"), 400
+
     engine = data.get("engine", "edge")
     try:
         if engine == "eleven":
@@ -172,9 +243,13 @@ def tts():
             )
         else:
             voice = EDGE_VOICES.get(data.get("voice", "salma"), EDGE_VOICES["salma"])
-            rate = f"{_clamp_int(data.get('rate'), -50, 100):+d}%"
-            pitch = f"{_clamp_int(data.get('pitch'), -50, 50):+d}Hz"
-            audio = asyncio.run(edge_synthesize(text, voice, rate, pitch))
+            mood = data.get("mood") if data.get("mood") in MOODS else "normal"
+            auto = str(data.get("auto", "1")).lower() not in ("0", "false", "no", "")
+            audio = asyncio.run(edge_expressive(
+                text, voice, mood, auto,
+                _clamp_int(data.get("rate"), -50, 100),
+                _clamp_int(data.get("pitch"), -50, 50),
+            ))
     except Exception as exc:  # network / service errors
         app.logger.exception("TTS failed")
         return jsonify(error=f"حصلت مشكلة في تحويل الصوت: {exc}"), 502

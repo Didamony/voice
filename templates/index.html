@@ -2,7 +2,15 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#c0392b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="صوت مصري">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/static/favicon.png">
+<link rel="manifest" href="/static/manifest.webmanifest">
 <title>صوت مصري</title>
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -12,8 +20,9 @@
   }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font-family:"Cairo",system-ui,sans-serif; }
-  main { max-width:720px; margin:0 auto; padding:32px 16px; }
-  h1 { margin:0 0 4px; font-size:2rem; }
+  main { max-width:720px; margin:0 auto; padding:calc(32px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(32px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+  h1 { margin:0 0 4px; font-size:2rem; display:flex; align-items:center; gap:12px; }
+  .logo { width:48px; height:48px; border-radius:12px; }
   p.sub { margin:0 0 24px; color:var(--muted); }
   .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px; }
   textarea { width:100%; min-height:180px; resize:vertical; font:inherit; font-size:1.1rem; padding:12px;
@@ -46,12 +55,36 @@
   .clip button { margin:0; width:auto; padding:6px 10px; font-size:.9rem; }
   .lbl { display:flex; flex-direction:column; gap:6px; margin-top:12px; font-weight:700; }
   .chk { display:flex; gap:8px; align-items:flex-start; margin-top:12px; }
+
+  /* ---- شاشة تنزيل التطبيق ---- */
+  .install-back { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:50; display:flex; align-items:flex-end; justify-content:center; }
+  .install-back[hidden] { display:none; }
+  .install { background:var(--card); color:var(--ink); width:100%; max-width:520px; border-radius:22px 22px 0 0;
+             padding:22px max(20px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(20px, env(safe-area-inset-left, 0px));
+             box-shadow:0 -8px 30px rgba(0,0,0,.25); animation:up .25s ease-out; }
+  @keyframes up { from { transform:translateY(40px); opacity:0; } to { transform:none; opacity:1; } }
+  @media (prefers-reduced-motion: reduce) { .install { animation:none; } }
+  .install-head { display:flex; align-items:center; gap:14px; }
+  .install-head img { width:60px; height:60px; border-radius:14px; }
+  .install-head h2 { margin:0; font-size:1.3rem; }
+  .install-head p { margin:2px 0 0; color:var(--muted); font-size:.95rem; }
+  .install ol { margin:18px 0 6px; padding:0; list-style:none; display:flex; flex-direction:column; gap:12px; }
+  .install li { display:flex; gap:12px; align-items:center; background:var(--bg); border-radius:12px; padding:10px 12px; line-height:1.6; }
+  .install li .n { flex:none; width:28px; height:28px; border-radius:50%; background:var(--accent); color:#fff;
+                   display:grid; place-items:center; font-weight:700; }
+  .install .ico { display:inline-block; vertical-align:middle; width:22px; height:22px; margin:0 2px; }
+  .install .note { color:var(--muted); font-size:.85rem; margin:8px 0 0; }
+  .install-btns { display:flex; gap:10px; margin-top:16px; }
+  .install-btns button { margin:0; }
+  .install-btns .skip { background:transparent; color:var(--muted); border:1px solid var(--line); flex:0 0 35%; }
+  .install-link { display:block; margin:18px auto 0; background:none; border:0; color:var(--accent); width:auto;
+                  font-size:.95rem; font-weight:700; padding:6px; text-decoration:underline; }
   .err { color:var(--accent); margin-top:12px; min-height:1em; }
 </style>
 </head>
 <body>
 <main>
-  <h1>🎙️ صوت مصري</h1>
+  <h1><img src="/static/icon-192.png" alt="" class="logo"> صوت مصري</h1>
   <p class="sub">اكتب أي كلام وهيتحول لصوت باللهجة المصرية</p>
   <div class="card">
     <textarea id="text" maxlength="{{ max_chars }}" placeholder="مثلاً: إزيك يا صاحبي؟ عامل إيه النهارده؟ وحشتني والله."></textarea>
@@ -67,6 +100,16 @@
           <option value="shakir">شاكر (راجل)</option>
         </select>
       </label>
+      <label>الإحساس
+        <select id="mood">
+          <option value="normal">عادي</option>
+          <option value="excited">متحمس 🤩</option>
+          <option value="calm">هادي 😌</option>
+          <option value="sad">حزين 😔</option>
+          <option value="story">بيحكي حكاية 📖</option>
+        </select>
+        <span class="hint"><input type="checkbox" id="auto" checked> تعبير تلقائي حسب علامات الترقيم</span>
+      </label>
       <label>السرعة: <span id="rateV">0%</span>
         <input id="rate" type="range" min="-50" max="100" value="0" step="5">
       </label>
@@ -74,6 +117,7 @@
         <input id="pitch" type="range" min="-50" max="50" value="0" step="5">
       </label>
     </div>
+    <p class="hint" id="edgeTip">💡 عشان الصوت يبقى فيه روح: استخدم ؟ و ! و ... في كلامك، وحط 😂 لو جملة فيها ضحك أو 😢 لو حزينة.</p>
     <div id="elevenBox" style="display:none">
       <div class="row">
         <label>ElevenLabs API key
@@ -147,6 +191,7 @@
     engine = e;
     $('tEdge').classList.toggle('on', e==='edge'); $('tEleven').classList.toggle('on', e==='eleven');
     $('edgeBox').style.display = e==='edge' ? '' : 'none';
+    $('edgeTip').style.display = e==='edge' ? '' : 'none';
     $('elevenBox').style.display = e==='eleven' ? '' : 'none';
   }
   $('tEdge').onclick = () => setEngine('edge');
@@ -238,7 +283,8 @@
       const res = await fetch('/api/tts', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(engine === 'edge'
-          ? { engine, text, voice: $('voice').value, rate: $('rate').value, pitch: $('pitch').value }
+          ? { engine, text, voice: $('voice').value, rate: $('rate').value, pitch: $('pitch').value,
+              mood: $('mood').value, auto: $('auto').checked ? 1 : 0 }
           : { engine, text, api_key: $('key').value, voice_id: $('evid').value,
               model: $('model').value, stability: $('stab').value })
       });
@@ -260,6 +306,113 @@
       $('go').disabled = false; $('go').textContent = 'حوّل لصوت';
     }
   });
+</script>
+
+<div class="install-back" id="installBack" hidden>
+  <div class="install" role="dialog" aria-modal="true" aria-labelledby="installTitle">
+    <div class="install-head">
+      <img src="/static/icon-192.png" alt="">
+      <div>
+        <h2 id="installTitle">نزّل التطبيق على موبايلك</h2>
+        <p>هيبقى ليه أيقونة ويفتح شاشة كاملة زي أي تطبيق</p>
+      </div>
+    </div>
+    <div id="installBody"></div>
+    <div class="install-btns">
+      <button type="button" id="installOk">تمام</button>
+      <button type="button" class="skip" id="installSkip">تخطي</button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  const KEY = 'install_skipped';
+  const store = { get(){ try { return localStorage.getItem(KEY); } catch { return null; } },
+                  set(){ try { localStorage.setItem(KEY, '1'); } catch {} } };
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  const inApp = /FBAN|FBAV|Instagram|Line\/|Snapchat|TikTok|musical_ly/i.test(ua);
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  let deferred = null;
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferred = e; render(); });
+
+  const SHARE = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#0a84ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg>';
+  const PLUS = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M12 8v8M8 12h8"/></svg>';
+  const DOTS = '<svg class="ico" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
+  const step = (n, html) => `<li><span class="n">${n}</span><span>${html}</span></li>`;
+
+  function render() {
+    const body = document.getElementById('installBody');
+    const ok = document.getElementById('installOk');
+    let html;
+    if (isAndroid && deferred) {
+      html = '<p class="note" style="font-size:1rem;color:inherit">دوس "ثبّت التطبيق" وبعدين "تثبيت" في الرسالة اللي هتظهر.</p>';
+      ok.textContent = 'ثبّت التطبيق';
+    } else if (isIOS) {
+      html = '<ol>' +
+        (inApp ? step('!', 'افتح اللينك في <b>Safari</b> الأول (من القايمة ⋯ اختار Open in Safari)') : '') +
+        step(1, `دوس زرار المشاركة ${SHARE} اللي تحت في Safari`) +
+        step(2, `انزل واختار <b>إضافة إلى الشاشة الرئيسية</b> ${PLUS}<br><small>Add to Home Screen</small>`) +
+        step(3, 'دوس <b>إضافة</b> (Add) فوق على الشمال') +
+        '</ol><p class="note">لو مش لاقي زرار المشاركة، افتح اللينك في Safari.</p>';
+      ok.textContent = 'تمام';
+    } else if (isAndroid) {
+      html = '<ol>' +
+        step(1, `افتح اللينك في <b>Chrome</b>، ودوس على ${DOTS} فوق`) +
+        step(2, 'اختار <b>تثبيت التطبيق</b> أو <b>إضافة إلى الشاشة الرئيسية</b><br><small>Install app / Add to Home screen</small>') +
+        step(3, 'دوس <b>تثبيت</b> (Install)') +
+        '</ol>';
+      ok.textContent = 'تمام';
+    } else {
+      html = '<ol>' +
+        step(1, 'افتح اللينك ده على موبايلك') +
+        step(2, 'على الآيفون: من Safari دوس المشاركة ' + SHARE + ' ← إضافة إلى الشاشة الرئيسية') +
+        step(3, 'على الأندرويد: من Chrome دوس ' + DOTS + ' ← تثبيت التطبيق') +
+        '</ol>';
+      ok.textContent = 'تمام';
+    }
+    body.innerHTML = html;
+  }
+
+  const back = document.getElementById('installBack');
+  function show() { render(); back.hidden = false; }
+  function hide() { back.hidden = true; }
+
+  document.getElementById('installOk').onclick = async () => {
+    if (isAndroid && deferred) {
+      deferred.prompt();
+      try { await deferred.userChoice; } catch {}
+      deferred = null;
+    }
+    store.set(); hide();
+  };
+  document.getElementById('installSkip').onclick = () => { store.set(); hide(); };
+  back.addEventListener('click', e => { if (e.target === back) hide(); });
+
+  // زرار صغير تحت يفتح الشرح في أي وقت
+  if (!standalone) {
+    const link = document.createElement('button');
+    link.type = 'button'; link.className = 'install-link'; link.textContent = '📲 إزاي أنزّل التطبيق؟';
+    link.onclick = show;
+    document.querySelector('main').append(link);
+  }
+
+  // أول ما يدوس على أي حاجة في الصفحة يظهرله الشرح (مرة واحدة)
+  if (!standalone && !store.get()) {
+    const first = e => {
+      if (back.contains(e.target) || e.target.closest('.install-link')) return;
+      document.removeEventListener('pointerdown', first, true);
+      e.preventDefault(); e.stopPropagation();
+      // امنع الضغطة دي نفسها إنها تشغّل الزرار اللي تحتها
+      document.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); }, { capture: true, once: true });
+      show();
+    };
+    document.addEventListener('pointerdown', first, true);
+  }
+})();
 </script>
 </body>
 </html>
